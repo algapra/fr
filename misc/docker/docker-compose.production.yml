@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  face-recognition:
+    image: ${IMAGE_NAME}:${IMAGE_VERSION}
+    build:
+      context: ../../
+      dockerfile: ./misc/docker/dockerfile
+    environment:
+      NODE_ENV: production
+    entrypoint: ["tail", "-f", "/dev/null"]
+    networks:
+      default:

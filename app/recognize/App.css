@@ -1,0 +1,120 @@
+/* Styling for the main container */
+.App {
+    display: flex;
+    flex-direction: column;
+    background: white;
+    height: 100vh;
+    margin: 0;
+    width: 100%;
+    align-items: center;
+  }
+  
+  h1 {
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    font-size: 40px;
+    font-weight: 900;
+  }
+  
+  .content-container {
+    display: flex;
+    width: 100%;
+    height: 50vw;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .webcam-container {
+    flex: 1;
+    max-width: 50%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .responsive-webcam {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .responsive-canvas {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .response-success {
+    height: 100%;
+    width: 100%;
+  }
+  
+  .response-failed {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .animation-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .captured-images {
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .animation-element {
+    text-align: center;
+    margin-top: 20px;
+    width: 100%;
+  }
+  
+  /* Styling for specific screen sizes using media queries (example) */
+  @media (max-width: 768px) {
+    h1 {
+      font-size: 30px;
+    }
+  
+    .content-container {
+      flex-direction: column;
+    }
+  
+    /* Adjust styling for response-success and response-failed elements */
+    .response-success,
+    .response-failed {
+      padding: 10px;
+      font-size: 16px;
+    }
+  }
+  
+  .verification {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgb(107, 107, 107);
+    width: 30%;
+    text-align: center;
+    flex: auto;
+    margin-bottom: 30px;
+    background-color: rgb(255, 255, 255);
+    padding: 20px;
+    font-size: 22px;
+    border-radius: 5px;
+  }
+  
+  .verification-title {
+    color: #0075ff;
+    padding-bottom: -20px;
+    font-weight: 400;
+    text-align: center;
+  }
+  
+  h1 {
+    font-weight: 600;
+  }
+  

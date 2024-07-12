@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productzilla-fr-member-management
+  namespace: {{namespace}}
+  labels:
+    app: fr-member-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fr-member-management
+  template:
+    metadata:
+      labels:
+        app: fr-member-management
+    spec:
+      initContainers:
+        - name: fr-member-management-migrator
+          image: productzilla/fr-member-management:{{tags}}
+          imagePullPolicy: Always
+          args: ['yarn', 'typeorm:run']
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-port
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-password
+            - name: DB_NAME
+              value: productzilla_fr-member-management_staging
+            - name: NODE_ENV
+              value: production
+      containers:
+        - name: fr-member-management
+          image: productzilla/fr-member-management:{{tags}}
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: '64Mi'
+              cpu: '250m'
+            limits:
+              memory: '256Mi'
+              cpu: '500m'
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-port
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-password
+            - name: DB_NAME
+              value: productzilla_fr-member-management_staging
+            - name: SERVER_URL
+              value: https://fr.neoapi.id/risetai/face-api
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: fr-secrets
+                  key: next-public-access-token
+            - name: FACE_GALLERY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: fr-secrets
+                  key: next-public-face-fallery-id
+            - name: TRX_ID
+              valueFrom:
+                secretKeyRef:
+                  name: fr-secrets
+                  key: next-public-trx-id
+            - name: MIDTRANS_SERVER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: midtrans-server-key
+            - name: MIDTRANS_CLIENT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: midtrans-client-key
+            - name: MIDTRANS_MERCHANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: midtrans-merchant-id
+            - name: MIDTRANS_IS_PROD
+              value: 'false'
+            - name: MIDTRANS_CALLBACK_URL
+              value: https://fr-management.staging.productzillaacademy.com/midtrans/callback
+            - name: OBJECT_STORAGE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: object-storage-username
+            - name: OBJECT_STORAGE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: object-storage-password
+            - name: OBJECT_STORAGE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: object-storage-host
+            - name: OBJECT_STORAGE_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: object-storage-bucket-name
+            - name: OBJECT_STORAGE_URL
+              value: https://$(OBJECT_STORAGE_USERNAME):$(OBJECT_STORAGE_PASSWORD)@$(OBJECT_STORAGE_HOST)
+            - name: APP_ENV
+              value: staging
+            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fr-member-management-svc
+  namespace: {{namespace}}
+spec:
+  selector:
+    app: fr-member-management
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000 # should match containerPort

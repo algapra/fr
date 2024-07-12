@@ -1,0 +1,18 @@
+apiVersion: v1
+clusters:
+  - cluster:
+      insecure-skip-tls-verify: true
+      server: {{server_host}}/api/endpoints/1/kubernetes
+    name: {{context}}
+contexts:
+  - context:
+      cluster: {{context}}
+      user: {{user}}
+    name: {{context}}
+current-context: {{context}}
+kind: Config
+preferences: {}
+users:
+  - name: {{user}}
+    user:
+      token: {{token}}

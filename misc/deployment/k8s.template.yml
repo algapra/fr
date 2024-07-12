@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productzilla-fr-member-management
+  namespace: {{namespace}}
+  labels:
+    app: fr-member-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fr-member-management
+  template:
+    metadata:
+      labels:
+        app: fr-member-management
+    spec:
+      initContainers:
+        - name: fr-member-management-migrator
+          image: productzilla/fr-member-management:{{tags}}
+          imagePullPolicy: Always
+          args: ['yarn', 'typeorm:run']
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-port
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-password
+            - name: DB_NAME
+              value: fr-member-management
+            - name: NODE_ENV
+              value: production
+      containers:
+        - name: fr-member-management
+          image: productzilla/fr-member-management:{{tags}}
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: '64Mi'
+              cpu: '250m'
+            limits:
+              memory: '256Mi'
+              cpu: '500m'
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-secret
+                  key: mariadb-port
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: productzilla-password-secret
+                  key: mariadb-password
+            - name: DB_NAME
+              value: fr-member-management
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fr-member-management-svc
+  namespace: {{namespace}}
+spec:
+  selector:
+    app: fr-member-management
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000 # should match containerPort

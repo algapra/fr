@@ -1,0 +1,308 @@
+kind: pipeline
+type: docker
+name: default
+
+volumes:
+  - name: cache
+    host:
+      path: /tmp/drone/cache
+
+environment:
+  DB_HOST: mariadb
+  DB_PORT: 3306
+  DB_USERNAME: root
+  DB_PASSWORD: productzilla
+  DB_NAME: productzilla
+
+services:
+  - name: mariadb
+    image: mariadb:10.3.10
+    environment:
+      MYSQL_USER: productzilla
+      MYSQL_ROOT_PASSWORD: productzilla
+      MYSQL_DATABASE: productzilla
+      MYSQL_PASSWORD: productzilla
+
+steps:
+  - name: prepare mariadb
+    image: mariadb:10.3.10
+    commands:
+      - until mysql -u root -p'productzilla' -e 'select version()' -h mariadb; do sleep 1; done;
+      - mysql -u root -p'productzilla' -h mariadb -e 'CREATE DATABASE IF NOT EXISTS identity'
+
+  - name: restore build cache
+    image: drillster/drone-volume-cache
+    settings:
+      restore: 'true'
+      mount:
+        - ./node_modules
+        - ./.pkg
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+
+  - name: build fr-member-management
+    image: node:18.19.0-alpine
+    commands:
+      - rm yarn.lock
+      - yarn install
+      - yarn build
+
+  - name: migrate fr-member-management
+    image: node:18.19.0-alpine
+    commands:
+      - export DB_HOST=$DB_HOST
+      - export DB_PORT=$DB_PORT
+      - export DB_USERNAME=$DB_USERNAME
+      - export DB_PASSWORD=$DB_PASSWORD
+      - export DB_NAME=$DB_NAME
+      - yarn typeorm:run
+
+  - name: rebuild build cache
+    image: drillster/drone-volume-cache
+    settings:
+      rebuild: 'true'
+      mount:
+        - ./node_modules
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+    when:
+      status:
+        - success
+        - failure
+
+trigger:
+  branch:
+    exclude:
+      - develop
+      - master
+  event:
+    exclude:
+      - custom
+    include:
+      - push
+
+---
+kind: pipeline
+type: docker
+name: semantic_versioning
+
+steps:
+  - name: semantic-release
+    image: ilhamfadhilah/drone-semantic-release
+    settings:
+      semantic_release: true # enable or disable semantic release
+      mode: release
+      git_method: cr
+      git_user_email: hello@productzillaacademy.com
+      git_host:
+        from_secret: gitea_host
+      git_host_proto:
+        from_secret: gitea_host_proto
+      git_login:
+        from_secret: gitea_login
+      git_password:
+        from_secret: gitea_password
+
+trigger:
+  branch:
+    - master
+  event:
+    exclude:
+      - custom
+    include:
+      - push
+
+---
+kind: pipeline
+type: docker
+name: publish develop image to docker registry
+
+volumes:
+  - name: cache
+    host:
+      path: /tmp/drone/cache
+
+steps:
+  - name: restore build cache
+    image: drillster/drone-volume-cache
+    settings:
+      restore: 'true'
+      mount:
+        - ./node_modules
+        - ./.pkg
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+
+  - name: build and publish image
+    image: plugins/docker
+    settings:
+      repo: 'productzilla/fr-member-management'
+      username:
+        from_secret: ci_registry_user
+      password:
+        from_secret: ci_registry_password
+      dockerfile: misc/docker/dockerfile
+      tag: dev
+
+  - name: rebuild build cache
+    image: drillster/drone-volume-cache
+    settings:
+      rebuild: 'true'
+      mount:
+        - ./node_modules
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+    when:
+      status:
+        - success
+        - failure
+
+  - name: deploy to staging
+    image: alpine:latest
+    environment:
+      SERVER_HOST:
+        from_secret: k8s_staging_server_host
+      CONTEXT:
+        from_secret: k8s_staging_context
+      USER:
+        from_secret: k8s_staging_user
+      TOKEN:
+        from_secret: k8s_staging_token
+      NAMESPACE:
+        from_secret: k8s_staging_namespace
+    commands:
+      - apk add curl
+      - curl -LO https://dl.k8s.io/release/v1.22.0/bin/linux/amd64/kubectl
+      - chmod u+x kubectl && mv kubectl /bin/kubectl
+      - mkdir -p /root/.kube
+      - cat misc/deployment/config.yml | sed "s#{{server_host}}#$SERVER_HOST#g" | sed "s#{{context}}#$CONTEXT#g" | sed "s#{{user}}#$USER#g" | sed "s#{{token}}#$TOKEN#g" > '/root/.kube/config'
+      - cat misc/deployment/k8s.template.staging.yml | sed 's/{{tags}}/dev/g' | sed "s/{{namespace}}/$NAMESPACE/g" > 'misc/deployment/dev.template.yml'
+      - kubectl -n $NAMESPACE apply -f 'misc/deployment/dev.template.yml'
+      - kubectl -n $NAMESPACE rollout restart deployment/productzilla-fr-member-management
+
+trigger:
+  branch:
+    - develop
+  event:
+    exclude:
+      - pull_request
+
+depends_on:
+  - default
+
+---
+kind: pipeline
+type: docker
+name: build production image
+
+volumes:
+  - name: cache
+    host:
+      path: /tmp/drone/cache
+
+steps:
+  - name: restore build cache
+    image: drillster/drone-volume-cache
+    settings:
+      restore: 'true'
+      mount:
+        - ./node_modules
+        - ./.pkg
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+
+  - name: generate tag for image publish
+    image: alpine:3.13.6
+    commands:
+      - echo -n "${DRONE_TAG}" > .tags
+
+  - name: build and publish image
+    image: plugins/docker
+    settings:
+      repo: 'productzilla/fr-member-management'
+      username:
+        from_secret: ci_registry_user
+      password:
+        from_secret: ci_registry_password
+      dockerfile: misc/docker/dockerfile
+
+  - name: rebuild build cache
+    image: drillster/drone-volume-cache
+    settings:
+      rebuild: 'true'
+      mount:
+        - ./node_modules
+        - ./.scannerwork
+        - ./.sonar
+        - ./.nexe
+    volumes:
+      - name: cache
+        path: /cache
+    when:
+      status:
+        - success
+        - failure
+trigger:
+  ref:
+    - refs/tags/*
+
+---
+kind: pipeline
+type: docker
+name: deploy build production image to kubernetes
+
+steps:
+  - name: generate tag for image publish
+    image: alpine:3.13.6
+    commands:
+      - if [ "$IMAGE_VERSION" == "" ]; then exit 1; fi;
+      - echo -n "${IMAGE_VERSION}" > .tags
+
+  - name: deploy
+    image: alpine:latest
+    environment:
+      SERVER_HOST:
+        from_secret: k8s_staging_server_host
+      CONTEXT:
+        from_secret: k8s_staging_context
+      USER:
+        from_secret: k8s_staging_user
+      TOKEN:
+        from_secret: k8s_staging_token
+      NAMESPACE:
+        from_secret: k8s_staging_namespace
+    commands:
+      - apk add curl
+      - curl -LO https://dl.k8s.io/release/v1.22.0/bin/linux/amd64/kubectl
+      - chmod u+x kubectl && mv kubectl /bin/kubectl
+      - mkdir -p /root/.kube
+      - cat misc/deployment/config.yml | sed "s#{{server_host}}#$SERVER_HOST#g" | sed "s#{{context}}#$CONTEXT#g" | sed "s#{{user}}#$USER#g" | sed "s#{{token}}#$TOKEN#g" > '/root/.kube/config'
+      - export IMAGE_VERSION=$(cat .tags)
+      - cat misc/deployment/k8s.template.yml | sed "s/{{tags}}/$IMAGE_VERSION/g" | sed "s/{{namespace}}/$NAMESPACE/g" > "misc/deployment/$IMAGE_VERSION.template.yml"
+      - kubectl -n $NAMESPACE apply -f "misc/deployment/$IMAGE_VERSION.template.yml"
+
+trigger:
+  branch:
+    - master
+  event:
+    - custom
